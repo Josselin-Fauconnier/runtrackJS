@@ -1,133 +1,197 @@
-const ALLOWED_DOMAINS = ["laplateforme.io"];
 
-function showAlert(msg, type = "info") {
-  const box = document.getElementById("alerts");
-  box.innerHTML = `
-    <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-      ${msg}
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
-    </div>`;
+
+const STUDENT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+-etudiant@laplateforme\.io$/;
+const ROLE_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+-(etudiant|moderateur|admin)@laplateforme\.io$/;
+
+const STAFF = [
+  { email: "alice-moderateur@laplateforme.io", password: "SuperPass!2025", role: "moderateur" },
+  { email: "root-admin@laplateforme.io", password: "AdminPass!2025", role: "admin" }
+];
+
+
+function readUsers() {
+  try { return JSON.parse(localStorage.getItem("users")) || []; }
+  catch { return []; }
+}
+
+function writeUsers(users) {
+  localStorage.setItem("users", JSON.stringify(users));
+}
+
+function setCurrentUser(user) {
+  localStorage.setItem("currentUser", JSON.stringify({
+    email: user.email,
+    role: user.role,
+    createdAt: user.createdAt || new Date().toISOString()
+  }));
+}
+
+function getCurrentUser() {
+  try { return JSON.parse(localStorage.getItem("currentUser")); }
+  catch { return null; }
 }
 
 
-const getDomain = (email) => (email.split("@")[1] || "").toLowerCase();
-const isAllowed = (email) => ALLOWED_DOMAINS.includes(getDomain(email));
-
-
-function Password(value) {
-  if (!value) return "Mot de passe obligatoire";
-
-  const manque = [];
-
-  if (value.length < 12) {
-    manque.push(`${12 - value.length} caractère(s) supplémentaire(s)`);
-  }
-  if (!/[A-Z]/.test(value)) {
-    manque.push("une majuscule");
-  }
-  if (!/[a-z]/.test(value)) {
-    manque.push("une minuscule");
-  }
-  if (!/[0-9]/.test(value)) {
-    manque.push("un chiffre");
-  }
-  if (!/[!@#$%^&_+\-=\[\].<>?]/.test(value)) {
-    manque.push("un caractère spécial (!@#$%^&_+...)");
-  }
-
-  if (manque.length === 0) return null;
-
-  if (manque.length === 1) {
-    return `Il manque : ${manque[0]}`;
+function validatePassword(value) {
+  let error = "";
+  if (!value) {
+    error = "Mot de passe obligatoire";
   } else {
-    const dernier = manque.pop();
-    return `Il manque : ${manque.join(", ")} et ${dernier}`;
+    const manque = [];
+    if (value.length < 12) manque.push(`${12 - value.length} caractère(s) supplémentaire(s)`);
+    if (!/[A-Z]/.test(value)) manque.push("une majuscule");
+    if (!/[a-z]/.test(value)) manque.push("une minuscule");
+    if (!/[0-9]/.test(value)) manque.push("un chiffre");
+    if (!/[!@#$%^&_+\-=\[\].<>?]/.test(value)) manque.push("un caractère spécial (!@#$%^&_+...)");
+
+    if (manque.length > 0) {
+      if (manque.length === 1) {
+        error = `Il manque : ${manque[0]}`;
+      } else {
+        const dernier = manque.pop();
+        error = `Il manque : ${manque.join(", ")} et ${dernier}`;
+      }
+    }
   }
+  return { ok: !error, error };
 }
 
-async function sha256(text) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+function isValidSignupEmail(email) {
+  return STUDENT_EMAIL_REGEX.test(email);
+}
+
+function parseRole(email) {
+  const m = email.match(ROLE_EMAIL_REGEX);
+  return m ? m[1] : null;
 }
 
 
-const loadUsers = () => JSON.parse(localStorage.getItem("users") || "[]");
-const saveUsers = (u) => localStorage.setItem("users", JSON.stringify(u));
-const setSession = (email) => localStorage.setItem("session", JSON.stringify({ email, ts: Date.now() }));
-const getSession = () => JSON.parse(localStorage.getItem("session") || "null");
-const clearSession = () => localStorage.removeItem("session");
+function redirectByRole(role) {
+  if (role === "admin") window.location.href = "admistration.html";
+  else if (role === "moderateur") window.location.href = "moderation.html";
+  else window.location.href = "calendar.html";
+}
 
+// ------------------- Affichage erreurs sous input -------------------
+function setFieldError(fieldId, message) {
+  const input = document.getElementById(fieldId);
+  if (!input) return;
 
-function render() {
-  const s = getSession();
-  const area = document.getElementById("memberArea");
-  const welcome = document.getElementById("welcome");
-  if (s?.email) {
-    area.classList.remove("d-none");
-    welcome.textContent = `Connecté : ${s.email}`;
+  let errorSpan = input.nextElementSibling;
+  if (!errorSpan || !errorSpan.classList.contains("error-message")) {
+    errorSpan = document.createElement("div");
+    errorSpan.className = "error-message";
+    errorSpan.style.color = "red";
+    errorSpan.style.fontSize = "0.9em";
+    input.insertAdjacentElement("afterend", errorSpan);
+  }
+  errorSpan.textContent = message || "";
+}
+
+// ------------------- Inscription -------------------
+function handleSignup(e) {
+  e.preventDefault();
+
+  const email = (document.getElementById("signupEmail")?.value || "").trim();
+  const password = document.getElementById("signupPassword")?.value || "";
+  const confirm = document.getElementById("signupPassword2")?.value || "";
+
+  // Vérifie email
+  if (!isValidSignupEmail(email)) {
+    setFieldError("signupEmail", "Format email invalide. Utilisez nom-etudiant@laplateforme.io");
+    return;
   } else {
-    area.classList.add("d-none");
-    welcome.textContent = "";
-  }
-}
-
-
-async function Signup(e) {
-  e.preventDefault();
-  const email = document.getElementById("signupEmail").value.trim().toLowerCase();
-  const pw = document.getElementById("signupPassword").value;
-  const pw2 = document.getElementById("signupPassword2").value;
-
-  if (!isAllowed(email)) {
-    return showAlert("Email non autorisé. Seuls les comptes @laplateforme.io sont valides.", "danger");
+    setFieldError("signupEmail", "");
   }
 
-  const pwError = Password(pw);
-  if (pwError) return showAlert(pwError, "warning");
+  // Vérifie mot de passe
+  const pwd = validatePassword(password);
+  if (!pwd.ok) {
+    setFieldError("signupPassword", pwd.error);
+    return;
+  } else {
+    setFieldError("signupPassword", "");
+  }
 
-  if (pw !== pw2) return showAlert("Les mots de passe ne correspondent pas.", "warning");
+  if (password !== confirm) {
+    setFieldError("signupPassword2", "Les mots de passe ne correspondent pas");
+    return;
+  } else {
+    setFieldError("signupConfirm", "");
+  }
 
-  const users = loadUsers();
-  if (users.some(u => u.email === email)) return showAlert("Ce compte existe déjà.", "warning");
+  const role = "etudiant";
+  const users = readUsers();
+  if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+    setFieldError("signupEmail", "Un compte existe déjà avec cet email");
+    return;
+  }
 
-  const passHash = await sha256(pw);
-  users.push({ email, passHash, createdAt: new Date().toISOString() });
-  saveUsers(users);
-  setSession(email);
-  showAlert("Compte créé et connecté.", "success");
-  render();
+  users.push({ email, password, role, createdAt: new Date().toISOString() });
+  writeUsers(users);
+  setCurrentUser({ email, role });
+  localStorage.setItem("session", JSON.stringify({ email, role }));
+  
+  redirectByRole(role);
+
 }
 
-
-async function Login(e) {
+// ------------------- Connexion -------------------
+function handleLogin(e) {
   e.preventDefault();
-  const email = document.getElementById("loginEmail").value.trim().toLowerCase();
-  const pw = document.getElementById("loginPassword").value;
 
-  if (!isAllowed(email)) return showAlert("Email non autorisé.", "danger");
+  const email = (document.getElementById("loginEmail")?.value || "").trim();
+  const password = document.getElementById("loginPassword")?.value || "";
 
-  const users = loadUsers();
-  const user = users.find(u => u.email === email);
-  if (!user) return showAlert("Compte introuvable.", "warning");
+  if (!ROLE_EMAIL_REGEX.test(email)) {
+    setFieldError("loginEmail", "Format email invalide. Utilisez nom-ROLE@laplateforme.io (ROLE = etudiant|moderateur|admin)");
+    return;
+  } else {
+    setFieldError("loginEmail", "");
+  }
 
-  const passHash = await sha256(pw);
-  if (passHash !== user.passHash) return showAlert("Mot de passe incorrect.", "danger");
+  const role = parseRole(email);
+  if (!role) {
+    setFieldError("loginEmail", "Rôle indéterminé dans l'adresse email");
+    return;
+  }
 
-  setSession(email);
-  showAlert("Connexion réussie.", "success");
-  render();
+  if (role === "etudiant") {
+    const users = readUsers();
+    const found = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (!found) {
+      setFieldError("loginEmail", "Compte étudiant introuvable. Inscrivez-vous d'abord.");
+      return;
+    }
+    if (found.password !== password) {
+      setFieldError("loginPassword", "Mot de passe incorrect");
+      return;
+    }
+    setCurrentUser(found);
+    redirectByRole("etudiant");
+    return;
+  }
+
+  const staff = STAFF.find(u => u.email.toLowerCase() === email.toLowerCase() && u.role === role);
+  if (!staff) {
+    setFieldError("loginEmail", "Ce compte modérateur/admin n'est pas autorisé.");
+    return;
+  }
+  if (staff.password !== password) {
+    setFieldError("loginPassword", "Mot de passe incorrect");
+    return;
+  }
+  setCurrentUser(staff);
+  redirectByRole(role);
 }
 
 
-function Logout() {
-  clearSession();
-  showAlert("Déconnecté.");
-  render();
-}
+document.addEventListener("DOMContentLoaded", () => {
+  const signupForm = document.getElementById("signupForm");
+  const loginForm = document.getElementById("loginForm");
 
+  if (signupForm) signupForm.addEventListener("submit", handleSignup);
+  if (loginForm) loginForm.addEventListener("submit", handleLogin);
+});
 
-document.getElementById("signupForm").addEventListener("submit", Signup);
-document.getElementById("loginForm").addEventListener("submit", Login);
-document.getElementById("logoutBtn").addEventListener("click", Logout);
-document.addEventListener("DOMContentLoaded", render);
-render();
+window.__auth = { handleSignup, handleLogin };
