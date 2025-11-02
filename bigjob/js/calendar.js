@@ -155,7 +155,7 @@ function cancelRequest(date) {
   renderRequests();
 }
 
-// ---------- bootstrap page ----------
+
 document.addEventListener("DOMContentLoaded", () => {
   const s = getSession();
   const welcome = document.getElementById("welcome");

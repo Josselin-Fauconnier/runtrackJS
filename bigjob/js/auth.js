@@ -1,197 +1,119 @@
+// js/auth.js
 
+// ---------- helpers UI ----------
+function ensureErrorNode(input) {
+  let box = input.nextElementSibling;
+  if (!box || !box.classList.contains("error-message")) {
+    box = document.createElement("div");
+    box.className = "error-message text-danger small mt-1";
+    input.after(box);
+  }
+  return box;
+}
+function setError(input, msg) { ensureErrorNode(input).textContent = msg || ""; }
+function clearError(input) { ensureErrorNode(input).textContent = ""; }
 
-const STUDENT_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+-etudiant@laplateforme\.io$/;
-const ROLE_EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+-(etudiant|moderateur|admin)@laplateforme\.io$/;
-
-const STAFF = [
-  { email: "alice-moderateur@laplateforme.io", password: "SuperPass!2025", role: "moderateur" },
-  { email: "root-admin@laplateforme.io", password: "AdminPass!2025", role: "admin" }
-];
-
-
-function readUsers() {
-  try { return JSON.parse(localStorage.getItem("users")) || []; }
+function getUsers() {
+  try { return JSON.parse(localStorage.getItem("users") || "[]"); }
   catch { return []; }
 }
+function saveUsers(arr) { localStorage.setItem("users", JSON.stringify(arr)); }
 
-function writeUsers(users) {
-  localStorage.setItem("users", JSON.stringify(users));
-}
-
-function setCurrentUser(user) {
-  localStorage.setItem("currentUser", JSON.stringify({
-    email: user.email,
-    role: user.role,
-    createdAt: user.createdAt || new Date().toISOString()
-  }));
-}
-
-function getCurrentUser() {
-  try { return JSON.parse(localStorage.getItem("currentUser")); }
-  catch { return null; }
-}
-
-
-function validatePassword(value) {
-  let error = "";
-  if (!value) {
-    error = "Mot de passe obligatoire";
-  } else {
-    const manque = [];
-    if (value.length < 12) manque.push(`${12 - value.length} caractère(s) supplémentaire(s)`);
-    if (!/[A-Z]/.test(value)) manque.push("une majuscule");
-    if (!/[a-z]/.test(value)) manque.push("une minuscule");
-    if (!/[0-9]/.test(value)) manque.push("un chiffre");
-    if (!/[!@#$%^&_+\-=\[\].<>?]/.test(value)) manque.push("un caractère spécial (!@#$%^&_+...)");
-
-    if (manque.length > 0) {
-      if (manque.length === 1) {
-        error = `Il manque : ${manque[0]}`;
-      } else {
-        const dernier = manque.pop();
-        error = `Il manque : ${manque.join(", ")} et ${dernier}`;
-      }
-    }
-  }
-  return { ok: !error, error };
-}
-
-function isValidSignupEmail(email) {
-  return STUDENT_EMAIL_REGEX.test(email);
-}
-
-function parseRole(email) {
-  const m = email.match(ROLE_EMAIL_REGEX);
-  return m ? m[1] : null;
-}
-
-
-function redirectByRole(role) {
-  if (role === "admin") window.location.href = "admistration.html";
-  else if (role === "moderateur") window.location.href = "moderation.html";
-  else window.location.href = "calendar.html";
-}
-
-// ------------------- Affichage erreurs sous input -------------------
-function setFieldError(fieldId, message) {
-  const input = document.getElementById(fieldId);
-  if (!input) return;
-
-  let errorSpan = input.nextElementSibling;
-  if (!errorSpan || !errorSpan.classList.contains("error-message")) {
-    errorSpan = document.createElement("div");
-    errorSpan.className = "error-message";
-    errorSpan.style.color = "red";
-    errorSpan.style.fontSize = "0.9em";
-    input.insertAdjacentElement("afterend", errorSpan);
-  }
-  errorSpan.textContent = message || "";
-}
-
-// ------------------- Inscription -------------------
-function handleSignup(e) {
-  e.preventDefault();
-
-  const email = (document.getElementById("signupEmail")?.value || "").trim();
-  const password = document.getElementById("signupPassword")?.value || "";
-  const confirm = document.getElementById("signupPassword2")?.value || "";
-
-  // Vérifie email
-  if (!isValidSignupEmail(email)) {
-    setFieldError("signupEmail", "Format email invalide. Utilisez nom-etudiant@laplateforme.io");
-    return;
-  } else {
-    setFieldError("signupEmail", "");
-  }
-
-  // Vérifie mot de passe
-  const pwd = validatePassword(password);
-  if (!pwd.ok) {
-    setFieldError("signupPassword", pwd.error);
-    return;
-  } else {
-    setFieldError("signupPassword", "");
-  }
-
-  if (password !== confirm) {
-    setFieldError("signupPassword2", "Les mots de passe ne correspondent pas");
-    return;
-  } else {
-    setFieldError("signupConfirm", "");
-  }
-
-  const role = "etudiant";
-  const users = readUsers();
-  if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-    setFieldError("signupEmail", "Un compte existe déjà avec cet email");
-    return;
-  }
-
-  users.push({ email, password, role, createdAt: new Date().toISOString() });
-  writeUsers(users);
-  setCurrentUser({ email, role });
+function setSession(email, role) {
   localStorage.setItem("session", JSON.stringify({ email, role }));
-  
-  redirectByRole(role);
-
 }
 
-// ------------------- Connexion -------------------
-function handleLogin(e) {
-  e.preventDefault();
+const RX_ETU = /^[a-z0-9._+-]+-etudiant@laplateforme\.io$/i;
+const RX_MOD = /^[a-z0-9._+-]+-moderateur@laplateforme\.io$/i;
+const RX_ADM = /^[a-z0-9._+-]+-admin@laplateforme\.io$/i;
 
-  const email = (document.getElementById("loginEmail")?.value || "").trim();
-  const password = document.getElementById("loginPassword")?.value || "";
-
-  if (!ROLE_EMAIL_REGEX.test(email)) {
-    setFieldError("loginEmail", "Format email invalide. Utilisez nom-ROLE@laplateforme.io (ROLE = etudiant|moderateur|admin)");
-    return;
-  } else {
-    setFieldError("loginEmail", "");
-  }
-
-  const role = parseRole(email);
-  if (!role) {
-    setFieldError("loginEmail", "Rôle indéterminé dans l'adresse email");
-    return;
-  }
-
-  if (role === "etudiant") {
-    const users = readUsers();
-    const found = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!found) {
-      setFieldError("loginEmail", "Compte étudiant introuvable. Inscrivez-vous d'abord.");
-      return;
-    }
-    if (found.password !== password) {
-      setFieldError("loginPassword", "Mot de passe incorrect");
-      return;
-    }
-    setCurrentUser(found);
-    redirectByRole("etudiant");
-    return;
-  }
-
-  const staff = STAFF.find(u => u.email.toLowerCase() === email.toLowerCase() && u.role === role);
-  if (!staff) {
-    setFieldError("loginEmail", "Ce compte modérateur/admin n'est pas autorisé.");
-    return;
-  }
-  if (staff.password !== password) {
-    setFieldError("loginPassword", "Mot de passe incorrect");
-    return;
-  }
-  setCurrentUser(staff);
-  redirectByRole(role);
-}
-
-
+// ---------- LOGIN ----------
 document.addEventListener("DOMContentLoaded", () => {
-  const signupForm = document.getElementById("signupForm");
   const loginForm = document.getElementById("loginForm");
+  const loginEmail = document.getElementById("loginEmail");
+  const loginPassword = document.getElementById("loginPassword");
 
-  if (signupForm) signupForm.addEventListener("submit", handleSignup);
-  if (loginForm) loginForm.addEventListener("submit", handleLogin);
+  if (loginForm) {
+    loginForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      clearError(loginEmail); clearError(loginPassword);
+
+      const email = loginEmail.value.trim();
+      const pwd = loginPassword.value;
+
+      if (!email) { setError(loginEmail, "Email obligatoire"); return; }
+      if (!pwd) { setError(loginPassword, "Mot de passe obligatoire"); return; }
+
+      const users = getUsers();
+      const u = users.find(x => x.email.toLowerCase() === email.toLowerCase());
+
+      // Étudiants: si non trouvé, demander création de compte
+      if (!u) {
+        if (RX_ETU.test(email)) {
+          setError(loginEmail, "Compte inexistant. Créez un compte.");
+        } else if (RX_MOD.test(email) || RX_ADM.test(email)) {
+          setError(loginEmail, "Accès réservé. Le compte doit exister dans users.json.");
+        } else {
+          setError(loginEmail, "Domaine non autorisé.");
+        }
+        return;
+      }
+
+      if (u.password !== pwd) { setError(loginPassword, "Mot de passe incorrect"); return; }
+
+      // OK → session + redirection par rôle
+      setSession(u.email, u.role);
+      if (u.role === "moderateur") {
+        location.replace("moderation.html");        // page backoffice modérateur
+      } else if (u.role === "admin") {
+        location.replace("admistration.html");      // nom de fichier déjà présent
+      } else {
+        location.replace("calendar.html");
+      }
+    });
+  }
+
+  // ---------- SIGNUP ----------
+  const signupForm = document.getElementById("signupForm");
+  const signupEmail = document.getElementById("signupEmail");
+  const signupPassword = document.getElementById("signupPassword");
+  const signupPassword2 = document.getElementById("signupPassword2");
+
+  if (signupForm) {
+    signupForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      clearError(signupEmail); clearError(signupPassword); clearError(signupPassword2);
+
+      const email = signupEmail.value.trim();
+      const pwd = signupPassword.value;
+      const pwd2 = signupPassword2.value;
+
+      // Étudiants uniquement
+      if (!RX_ETU.test(email)) {
+        if (RX_MOD.test(email) || RX_ADM.test(email)) {
+          setError(signupEmail, "Création interdite pour admin/modérateur. Utilisez un compte JSON.");
+        } else {
+          setError(signupEmail, "Format attendu: xxx-etudiant@laplateforme.io");
+        }
+        return;
+      }
+
+      if (!pwd || pwd.length < 12) { setError(signupPassword, "12 caractères minimum"); return; }
+      if (pwd !== pwd2) { setError(signupPassword2, "Les mots de passe ne correspondent pas"); return; }
+
+      const users = getUsers();
+      if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+        setError(signupEmail, "Email déjà enregistré"); return;
+      }
+
+      // Création étudiant
+      users.push({ email, password: pwd, role: "etudiant" });
+      saveUsers(users);
+
+      setSession(email, "etudiant");
+      location.replace("calendar.html");
+    });
+  }
 });
 
-window.__auth = { handleSignup, handleLogin };
+

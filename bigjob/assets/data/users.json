@@ -1,0 +1,13 @@
+[
+  {
+    "email": "josselin-moderateur@laplateforme.io",
+    "password": "PassModo=1234",
+    "role": "moderateur"
+  },
+  {
+    "email": "josselin-admin@laplateforme.io",
+    "password": "Passw0rd!Pass",
+    "role": "admin"
+  }
+]
+
