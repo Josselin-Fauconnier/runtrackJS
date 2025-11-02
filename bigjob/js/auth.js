@@ -1,6 +1,4 @@
-// js/auth.js
 
-// ---------- helpers UI ----------
 function ensureErrorNode(input) {
   let box = input.nextElementSibling;
   if (!box || !box.classList.contains("error-message")) {
@@ -27,7 +25,7 @@ const RX_ETU = /^[a-z0-9._+-]+-etudiant@laplateforme\.io$/i;
 const RX_MOD = /^[a-z0-9._+-]+-moderateur@laplateforme\.io$/i;
 const RX_ADM = /^[a-z0-9._+-]+-admin@laplateforme\.io$/i;
 
-// ---------- LOGIN ----------
+
 document.addEventListener("DOMContentLoaded", () => {
   const loginForm = document.getElementById("loginForm");
   const loginEmail = document.getElementById("loginEmail");
@@ -47,7 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const users = getUsers();
       const u = users.find(x => x.email.toLowerCase() === email.toLowerCase());
 
-      // Étudiants: si non trouvé, demander création de compte
+      
       if (!u) {
         if (RX_ETU.test(email)) {
           setError(loginEmail, "Compte inexistant. Créez un compte.");
@@ -61,19 +59,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (u.password !== pwd) { setError(loginPassword, "Mot de passe incorrect"); return; }
 
-      // OK → session + redirection par rôle
+      
       setSession(u.email, u.role);
       if (u.role === "moderateur") {
-        location.replace("moderation.html");        // page backoffice modérateur
+        location.replace("moderation.html");        
       } else if (u.role === "admin") {
-        location.replace("admistration.html");      // nom de fichier déjà présent
+        location.replace("admistration.html");      
       } else {
         location.replace("calendar.html");
       }
     });
   }
 
-  // ---------- SIGNUP ----------
+  
   const signupForm = document.getElementById("signupForm");
   const signupEmail = document.getElementById("signupEmail");
   const signupPassword = document.getElementById("signupPassword");
@@ -88,7 +86,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const pwd = signupPassword.value;
       const pwd2 = signupPassword2.value;
 
-      // Étudiants uniquement
+    
       if (!RX_ETU.test(email)) {
         if (RX_MOD.test(email) || RX_ADM.test(email)) {
           setError(signupEmail, "Création interdite pour admin/modérateur. Utilisez un compte JSON.");
@@ -106,7 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
         setError(signupEmail, "Email déjà enregistré"); return;
       }
 
-      // Création étudiant
+      
       users.push({ email, password: pwd, role: "etudiant" });
       saveUsers(users);
 

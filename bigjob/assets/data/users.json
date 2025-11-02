@@ -6,7 +6,7 @@
   },
   {
     "email": "josselin-admin@laplateforme.io",
-    "password": "Passw0rd!Pass",
+    "password": "PassAdmin=1234",
     "role": "admin"
   }
 ]
